@@ -203,12 +203,24 @@ Question: {query}
 
 Answer:"""
 
-    response = groq_client.chat.completions.create(
-        model="openai/gpt-oss-20b",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=500,
-    )
+    try:
+        response = groq_client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=500,
+        )
+    except Exception as e:
+        error_text = str(e).lower()
+        if "rate_limit" in error_text or "429" in error_text:
+            raise RuntimeError(
+                "DocuMind AI is getting a lot of questions right now and hit its "
+                "rate limit. Please wait about a minute and try again."
+            ) from e
+        raise RuntimeError(
+            "Something went wrong generating an answer. Please try again."
+        ) from e
+
     return response.choices[0].message.content
 
 
@@ -247,10 +259,14 @@ if st.session_state.collection is not None:
     if query:
         with st.chat_message("user"):
             st.write(query)
-        with st.spinner("Thinking..."):
-            answer = generate_answer(st.session_state.collection, query)
-        with st.chat_message("assistant"):
-            st.write(answer)
-        st.session_state.chat_history.append((query, answer))
+        try:
+            with st.spinner("Thinking..."):
+                answer = generate_answer(st.session_state.collection, query)
+        except RuntimeError as e:
+            st.error(str(e))
+        else:
+            with st.chat_message("assistant"):
+                st.write(answer)
+            st.session_state.chat_history.append((query, answer))
 else:
     st.info("Drop a PDF above to start asking questions.")
