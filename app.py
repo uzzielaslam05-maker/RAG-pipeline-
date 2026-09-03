@@ -6,9 +6,126 @@ from sentence_transformers import SentenceTransformer
 import chromadb
 from groq import Groq
 
-st.set_page_config(page_title="PDF RAG Chatbot", page_icon="📄")
-st.title("📄 Ask Questions About Your PDF")
-st.caption("Upload a PDF, then ask questions about its content. Powered by ChromaDB + Groq.")
+st.set_page_config(page_title="DocuMind AI", page_icon="🧠", layout="centered")
+
+CUSTOM_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+
+.stApp {
+    background: radial-gradient(circle at 15% 0%, #0D1326 0%, #080B14 55%) !important;
+}
+
+/* ---------- Hero ---------- */
+.dm-hero {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 8px 0 28px 0;
+    border-bottom: 1px solid #1B2340;
+    margin-bottom: 28px;
+}
+.dm-hero-icon {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    background: linear-gradient(135deg, #12356B 0%, #0D1B33 100%);
+    border: 1px solid #2A5CB8;
+    box-shadow: 0 0 24px rgba(34, 211, 238, 0.25), inset 0 0 12px rgba(61, 139, 255, 0.15);
+}
+.dm-hero-text h1 {
+    font-family: 'Sora', sans-serif;
+    font-size: 1.9rem;
+    font-weight: 700;
+    color: #EDF1FC;
+    margin: 0;
+    letter-spacing: -0.02em;
+}
+.dm-hero-text p {
+    font-family: 'Inter', sans-serif;
+    color: #8892B0;
+    font-size: 0.92rem;
+    margin: 4px 0 0 0;
+}
+
+/* ---------- File uploader ---------- */
+[data-testid="stFileUploaderDropzone"] {
+    background: #0C1122 !important;
+    border: 1.5px dashed #2C3660 !important;
+    border-radius: 14px !important;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+[data-testid="stFileUploaderDropzone"]:hover {
+    border-color: #3D8BFF !important;
+    background: #0E1530 !important;
+}
+[data-testid="stFileUploaderDropzone"] button {
+    background: #3D8BFF !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+}
+[data-testid="stWidgetLabel"] p {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+    color: #6E7A9C;
+}
+
+/* ---------- Alerts ---------- */
+div[data-testid="stAlertContainer"] {
+    background: #0E1530 !important;
+    border: 1px solid #223061 !important;
+    border-left: 3px solid #3D8BFF !important;
+    border-radius: 10px !important;
+    color: #C7D2F0 !important;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+}
+
+/* ---------- Chat ---------- */
+[data-testid="stChatMessage"] {
+    background: transparent !important;
+    padding: 4px 0 !important;
+}
+[data-testid="stChatMessageContent"] {
+    background: #0F1528 !important;
+    border: 1px solid #1E2748 !important;
+    border-radius: 12px !important;
+    padding: 14px 16px !important;
+}
+[data-testid="stChatInput"] textarea {
+    background: #0C1122 !important;
+    border: 1px solid #2C3660 !important;
+    border-radius: 10px !important;
+    color: #E7ECFB !important;
+}
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+st.markdown(
+    """
+    <div class="dm-hero">
+        <div class="dm-hero-icon">🧠</div>
+        <div class="dm-hero-text">
+            <h1>DocuMind AI</h1>
+            <p>Upload a PDF and get grounded answers, pulled straight from the source.</p>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ---------- Cached resources (loaded once per app instance) ----------
@@ -117,7 +234,7 @@ if uploaded_file is not None and st.session_state.current_file != uploaded_file.
         st.session_state.collection = build_index(chunks)
         st.session_state.current_file = uploaded_file.name
         st.session_state.chat_history = []
-    st.success(f"Indexed {len(chunks)} chunks from **{uploaded_file.name}**")
+    st.success(f"Indexed {len(chunks)} chunks from {uploaded_file.name}")
 
 if st.session_state.collection is not None:
     for q, a in st.session_state.chat_history:
@@ -136,4 +253,4 @@ if st.session_state.collection is not None:
             st.write(answer)
         st.session_state.chat_history.append((query, answer))
 else:
-    st.info("Upload a PDF above to get started.")
+    st.info("Drop a PDF above to start asking questions.")
