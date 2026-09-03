@@ -1,4 +1,5 @@
 # 🧠 DocuMind AI
+Live Here: https://uzzielaslam05-maker-rag-pipeline--app-6kwz9s.streamlit.app/
 
 > **Ask questions. Get grounded answers.**
 >
