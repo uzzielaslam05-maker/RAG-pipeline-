@@ -1,6 +1,8 @@
+import re
 import uuid
 
 import streamlit as st
+import streamlit.components.v1 as components
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 import chromadb
@@ -151,6 +153,81 @@ embedding_model = load_embedding_model()
 groq_client = get_groq_client()
 
 
+# ---------- Rate-limit handling ----------
+
+class RateLimitWait(Exception):
+    """Raised when Groq's API rate limit is hit. Carries the wait time, if known."""
+
+    def __init__(self, retry_seconds: float | None):
+        self.retry_seconds = retry_seconds
+        super().__init__("Rate limit hit")
+
+
+class GenerationError(Exception):
+    """Raised for any other failure while generating an answer."""
+
+
+def parse_retry_after_seconds(exc: Exception) -> float | None:
+    """Pull the wait time out of a Groq rate-limit error, in seconds."""
+    # Prefer the raw HTTP header if the SDK exposes it — it's authoritative.
+    response = getattr(exc, "response", None)
+    if response is not None:
+        header_val = response.headers.get("retry-after")
+        if header_val:
+            try:
+                return float(header_val)
+            except ValueError:
+                pass
+
+    # Fall back to parsing Groq's error message, e.g. "try again in 6m11.52s"
+    match = re.search(r"try again in\s+(?:([\d.]+)m)?([\d.]+)s", str(exc))
+    if match:
+        minutes = float(match.group(1)) if match.group(1) else 0.0
+        seconds = float(match.group(2))
+        return minutes * 60 + seconds
+
+    return None
+
+
+def render_rate_limit_banner(retry_seconds: float | None) -> None:
+    """Show a rate-limit notice with the recovery time in the visitor's own
+    local timezone, computed client-side since the server doesn't know it."""
+    if retry_seconds is None:
+        st.error(
+            "DocuMind AI is getting a lot of questions right now and hit its "
+            "rate limit. Please wait about a minute and try again."
+        )
+        return
+
+    components.html(
+        f"""
+        <div style="
+            background:#0E1530;
+            border:1px solid #223061;
+            border-left:3px solid #E2574C;
+            border-radius:10px;
+            padding:14px 16px;
+            font-family:'JetBrains Mono', monospace;
+            font-size:0.85rem;
+            color:#C7D2F0;
+            line-height:1.5;
+        ">
+            DocuMind AI hit its rate limit. It'll be ready again at
+            <strong id="dm-retry-time">…</strong> your time.
+        </div>
+        <script>
+            const retryAfterSeconds = {retry_seconds};
+            const readyTime = new Date(Date.now() + retryAfterSeconds * 1000);
+            const formatted = readyTime.toLocaleTimeString([], {{
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            }});
+            document.getElementById('dm-retry-time').innerText = formatted;
+        </script>
+        """,
+        height=70,
+    )
+
+
 # ---------- RAG pipeline functions ----------
 
 def extract_text(reader: PdfReader) -> str:
@@ -213,11 +290,8 @@ Answer:"""
     except Exception as e:
         error_text = str(e).lower()
         if "rate_limit" in error_text or "429" in error_text:
-            raise RuntimeError(
-                "DocuMind AI is getting a lot of questions right now and hit its "
-                "rate limit. Please wait about a minute and try again."
-            ) from e
-        raise RuntimeError(
+            raise RateLimitWait(parse_retry_after_seconds(e)) from e
+        raise GenerationError(
             "Something went wrong generating an answer. Please try again."
         ) from e
 
@@ -262,7 +336,9 @@ if st.session_state.collection is not None:
         try:
             with st.spinner("Thinking..."):
                 answer = generate_answer(st.session_state.collection, query)
-        except RuntimeError as e:
+        except RateLimitWait as e:
+            render_rate_limit_banner(e.retry_seconds)
+        except GenerationError as e:
             st.error(str(e))
         else:
             with st.chat_message("assistant"):
