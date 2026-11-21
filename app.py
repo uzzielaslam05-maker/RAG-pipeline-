@@ -1,4 +1,5 @@
 import re
+import time
 import uuid
 
 import streamlit as st
@@ -6,7 +7,7 @@ import streamlit.components.v1 as components
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 import chromadb
-from groq import Groq
+from openai import OpenAI, RateLimitError
 
 st.set_page_config(page_title="DocuMind AI", page_icon="🧠", layout="centered")
 
@@ -137,26 +138,39 @@ def load_embedding_model():
     return SentenceTransformer("all-MiniLM-L6-v2")
 
 
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# "openrouter/free" is OpenRouter's free-models router: it picks an available
+# free model for each request, so the app doesn't break when the list of free
+# models changes. To pin one model, set OPENROUTER_MODEL in Streamlit Secrets
+# (e.g. "google/gemma-4-31b-it:free").
+DEFAULT_MODEL = "openrouter/free"
+
+
+def get_model_name() -> str:
+    return st.secrets.get("OPENROUTER_MODEL", DEFAULT_MODEL)
+
+
 @st.cache_resource
-def get_groq_client():
-    api_key = st.secrets.get("GROQ_API_KEY")
+def get_llm_client():
+    api_key = st.secrets.get("OPENROUTER_API_KEY")
     if not api_key:
         st.error(
-            "GROQ_API_KEY is not set. Add it in Streamlit Cloud under "
+            "OPENROUTER_API_KEY is not set. Add it in Streamlit Cloud under "
             "App settings → Secrets (see README.md)."
         )
         st.stop()
-    return Groq(api_key=api_key)
+    # OpenRouter exposes an OpenAI-compatible API, so the OpenAI SDK works as-is.
+    return OpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL)
 
 
 embedding_model = load_embedding_model()
-groq_client = get_groq_client()
+llm_client = get_llm_client()
 
 
 # ---------- Rate-limit handling ----------
 
 class RateLimitWait(Exception):
-    """Raised when Groq's API rate limit is hit. Carries the wait time, if known."""
+    """Raised when the LLM API rate limit is hit. Carries the wait time, if known."""
 
     def __init__(self, retry_seconds: float | None):
         self.retry_seconds = retry_seconds
@@ -168,7 +182,7 @@ class GenerationError(Exception):
 
 
 def parse_retry_after_seconds(exc: Exception) -> float | None:
-    """Pull the wait time out of a Groq rate-limit error, in seconds."""
+    """Pull the wait time out of a rate-limit error, in seconds."""
     # Prefer the raw HTTP header if the SDK exposes it — it's authoritative.
     response = getattr(exc, "response", None)
     if response is not None:
@@ -179,7 +193,18 @@ def parse_retry_after_seconds(exc: Exception) -> float | None:
             except ValueError:
                 pass
 
-    # Fall back to parsing Groq's error message, e.g. "try again in 6m11.52s"
+        # OpenRouter reports when the limit resets as an epoch timestamp in
+        # milliseconds (best-effort: skipped if the header is missing/odd).
+        reset_val = response.headers.get("x-ratelimit-reset")
+        if reset_val:
+            try:
+                wait = float(reset_val) / 1000.0 - time.time()
+                if wait > 0:
+                    return wait
+            except ValueError:
+                pass
+
+    # Fall back to parsing the error message, e.g. "try again in 6m11.52s"
     match = re.search(r"try again in\s+(?:([\d.]+)m)?([\d.]+)s", str(exc))
     if match:
         minutes = float(match.group(1)) if match.group(1) else 0.0
@@ -281,21 +306,33 @@ Question: {query}
 Answer:"""
 
     try:
-        response = groq_client.chat.completions.create(
-            model="openai/gpt-oss-20b",
+        response = llm_client.chat.completions.create(
+            model=get_model_name(),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
-            max_tokens=500,
+            # Some free models are reasoning models whose thinking counts
+            # toward this cap, so keep it roomy.
+            max_tokens=1500,
         )
     except Exception as e:
         error_text = str(e).lower()
-        if "rate_limit" in error_text or "429" in error_text:
+        if (
+            isinstance(e, RateLimitError)
+            or "rate_limit" in error_text
+            or "too_many_requests" in error_text
+            or "429" in error_text
+        ):
             raise RateLimitWait(parse_retry_after_seconds(e)) from e
         raise GenerationError(
             "Something went wrong generating an answer. Please try again."
         ) from e
 
-    return response.choices[0].message.content
+    answer = response.choices[0].message.content
+    if not answer or not answer.strip():
+        raise GenerationError(
+            "The model returned an empty answer. Please try asking again."
+        )
+    return answer
 
 
 # ---------- Session state ----------
