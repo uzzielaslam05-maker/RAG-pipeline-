@@ -1,15 +1,41 @@
+import base64
+import io
 import re
 import time
 import uuid
+from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
+from PIL import Image
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 import chromadb
 from openai import OpenAI, RateLimitError
 
-st.set_page_config(page_title="DocuMind AI", page_icon="🧠", layout="centered")
+# ---------- Logo ----------
+# logo.png sits next to app.py in the repo. It's used for the browser-tab icon
+# and (resized, embedded as base64) in the page header.
+LOGO_PATH = Path(__file__).parent / "logo.png"
+
+
+def load_logo() -> Image.Image | None:
+    try:
+        return Image.open(LOGO_PATH).convert("RGBA")
+    except Exception:
+        return None  # app still works if the logo file is missing
+
+
+def logo_data_uri(size: int = 112) -> str:
+    logo = load_logo()
+    if logo is None:
+        return ""
+    buf = io.BytesIO()
+    logo.resize((size, size), Image.LANCZOS).save(buf, format="PNG", optimize=True)
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+st.set_page_config(page_title="DocuMind AI", page_icon=load_logo(), layout="centered")
 
 CUSTOM_CSS = """
 <style>
@@ -36,14 +62,9 @@ html, body, [class*="css"] {
     flex-shrink: 0;
     width: 56px;
     height: 56px;
-    border-radius: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    background: linear-gradient(135deg, #12356B 0%, #0D1B33 100%);
+    border-radius: 14px;
     border: 1px solid #2A5CB8;
-    box-shadow: 0 0 24px rgba(34, 211, 238, 0.25), inset 0 0 12px rgba(61, 139, 255, 0.15);
+    box-shadow: 0 0 24px rgba(34, 211, 238, 0.22);
 }
 .dm-hero-text h1 {
     font-family: 'Sora', sans-serif;
@@ -117,10 +138,17 @@ div[data-testid="stAlertContainer"] {
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+_logo_uri = logo_data_uri()
+_logo_html = (
+    f'<img class="dm-hero-icon" src="{_logo_uri}" alt="DocuMind AI logo">'
+    if _logo_uri
+    else ""
+)
+
 st.markdown(
-    """
+    f"""
     <div class="dm-hero">
-        <div class="dm-hero-icon">🧠</div>
+        {_logo_html}
         <div class="dm-hero-text">
             <h1>DocuMind AI</h1>
             <p>Upload a PDF and get grounded answers, pulled straight from the source.</p>
