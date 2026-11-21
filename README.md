@@ -21,7 +21,7 @@ The initial pipeline was designed with:
 - **PyPDF** for PDF loading and processing
 - **Sentence Transformers** for semantic embeddings
 - **ChromaDB** for local vector storage
-- **Groq** for LLM-powered response generation
+- **OpenRouter** (free models) for LLM-powered response generation
 - **Streamlit** for the interactive web interface
 - **Google Colab** as a convenient development environment during the early pipeline work
 
@@ -64,7 +64,7 @@ RAG adds a retrieval layer:
                           ▼
 ┌──────────────┐   ┌──────────────────┐
 │ User Query   │──▶│ Retrieval + LLM  │
-└──────────────┘   │     (Groq)        │
+└──────────────┘   │  (OpenRouter)    │
                    └────────┬─────────┘
                             │
                             ▼
@@ -89,13 +89,13 @@ The system is designed around embeddings rather than simple keyword matching, al
 ChromaDB provides the vector database layer for storing and searching document embeddings locally during development.
 
 ### 🤖 LLM Generation
-Groq is used as the generation provider for producing responses from the retrieved context.
+OpenRouter is used as the generation provider for producing responses from the retrieved context. By default the app uses OpenRouter's free-models router (`openrouter/free`), which picks an available free model for each request; a specific model can be pinned with the `OPENROUTER_MODEL` secret.
 
 ### 🖥️ Streamlit Interface
 The project exposes the functionality through a Streamlit application rather than requiring users to interact directly with Python code.
 
 ### 🌍 Timezone-Aware Rate-Limit Feedback
-When Groq returns a rate-limit error, the application attempts to determine the provider's retry interval. If successful, the interface can calculate the recovery time in the visitor's browser, allowing the displayed time to correspond to the user's local timezone.
+When the LLM provider returns a rate-limit error, the application attempts to determine the provider's retry interval. If successful, the interface can calculate the recovery time in the visitor's browser, allowing the displayed time to correspond to the user's local timezone.
 
 If the provider's retry information cannot be determined, the application falls back to a more general wait message.
 
@@ -113,7 +113,7 @@ The project includes Streamlit configuration for a darker visual presentation th
 | PDF handling | PyPDF |
 | Embeddings | Sentence Transformers |
 | Vector database | ChromaDB |
-| LLM provider | Groq |
+| LLM provider | OpenRouter (free models) |
 | Development environment | Google Colab / Local Python |
 | Source control | Git + GitHub |
 
@@ -128,6 +128,7 @@ DocuMind-AI/
 │
 ├── app.py
 ├── requirements.txt
+├── secrets.toml.example
 ├── .gitignore
 │
 ├── .streamlit/
@@ -184,19 +185,31 @@ pip install pypdf chromadb sentence-transformers
 
 ### 4. Configure the LLM provider
 
-The application uses Groq for generation.
+The application uses OpenRouter for generation.
 
-Create a Groq API key and provide it through your environment or the secret-management mechanism expected by the application.
+Create an OpenRouter API key at [openrouter.ai/keys](https://openrouter.ai/keys) and provide it through your environment or the secret-management mechanism expected by the application.
 
 **Do not hard-code API keys inside the repository.**
 
 For local development, an environment variable can be used:
 
 ```bash
-GROQ_API_KEY=your_api_key_here
+OPENROUTER_API_KEY=your_api_key_here
 ```
 
-On Streamlit deployment, store the key using Streamlit's secrets mechanism rather than committing it to Git.
+On Streamlit deployment, store the key using Streamlit's secrets mechanism (App settings → Secrets) rather than committing it to Git:
+
+```toml
+OPENROUTER_API_KEY = "your-openrouter-api-key"
+```
+
+Optionally pin a specific free model:
+
+```toml
+OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
+```
+
+For local runs with `streamlit run`, put the same lines in `.streamlit/secrets.toml` (git-ignored).
 
 ### 5. Run the application
 
@@ -270,6 +283,8 @@ The application attempts to:
 4. Convert that duration into a recovery time.
 5. Calculate the displayed time in the browser so it follows the visitor's local timezone.
 6. Fall back to a generic wait message if the provider does not expose usable retry information.
+
+OpenRouter's free models are limited to 20 requests per minute and, per account, 50 requests per day (1,000 per day once at least $10 of credits has been purchased). The daily limit is shared by every visitor of the deployed app. Free-tier limits change, so check OpenRouter's documentation for current numbers.
 
 This is deliberately better than hard-coding a statement such as "try again in one minute," because provider-side retry windows are not guaranteed to be exactly one minute.
 
@@ -435,6 +450,6 @@ DocuMind AI is being developed incrementally from a foundational PDF/RAG pipelin
 
 **Turn documents into conversations.**
 
-Built with Python · Streamlit · ChromaDB · Sentence Transformers · Groq
+Built with Python · Streamlit · ChromaDB · Sentence Transformers · OpenRouter
 
 </div>
