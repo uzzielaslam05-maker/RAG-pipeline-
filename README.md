@@ -1,5 +1,10 @@
-# 🧠 DocuMind AI
-Live Here: https://uzzielaslam05-maker-documind--app-6kwz9s.streamlit.app/
+<p align="center">
+  <img src="logo.png" width="110" alt="DocuMind AI logo">
+</p>
+
+<h1 align="center">DocuMind AI</h1>
+
+Live Here: https://uzzielaslam05-maker-rag-pipeline--app-6kwz9s.streamlit.app/
 
 > **Ask questions. Get grounded answers.**
 >
@@ -128,6 +133,7 @@ DocuMind-AI/
 │
 ├── app.py
 ├── requirements.txt
+├── logo.png
 ├── secrets.toml.example
 ├── .gitignore
 │
@@ -290,7 +296,7 @@ This is deliberately better than hard-coding a statement such as "try again in o
 
 ---
 
-## 🧠 RAG Pipeline
+## RAG Pipeline
 
 The intended pipeline can be summarized as:
 
