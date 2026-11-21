@@ -4,7 +4,7 @@
 
 <h1 align="center">DocuMind AI</h1>
 
-Live Here: https://uzzielaslam05-maker-rag-pipeline--app-6kwz9s.streamlit.app/
+Live Here: https://uzzielaslam05-maker-documind--app-6kwz9s.streamlit.app/
 
 > **Ask questions. Get grounded answers.**
 >
